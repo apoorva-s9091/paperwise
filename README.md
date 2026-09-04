@@ -1,2 +1,1 @@
-# paperwise
-Tree-structured RAG for research papers — parses PDFs into section-aware markdown for citation-grounded Q&amp;A, no chunk-boundary context loss.
+Paperwise lets you query a corpus of research papers directly and get citation-grounded answers pulled from the actual text — not a ranked list of links, not a chatbot that hallucinates references. Instead of naive fixed-size chunking, papers are parsed into structured, section-aware markdown so retrieval respects the paper's actual structure (Abstract, Methods, Results) instead of cutting through it arbitrarily.
