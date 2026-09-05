@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Paperwise</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 720px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+    background: #fafafa;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.subtitle { color: #666; margin-top: 0; margin-bottom: 32px; }
+  section {
+    background: white;
+    border: 1px solid #e2e2e2;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.03em; color: #555; margin-top: 0; }
+  input, textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  button {
+    background: #1a1a1a;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:disabled { background: #999; cursor: not-allowed; }
+  #status, #answer {
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+  #status.ok { background: #eafaf0; color: #1a7a3c; }
+  #status.err { background: #fdeaea; color: #a33; }
+  #answer { background: #f2f4f7; }
+  select { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; }
+</style>
+</head>
+<body>
+
+<h1>paperwise</h1>
+<p class="subtitle">Ask questions against research papers, get citation-grounded answers.</p>
+
+<section>
+  <h2>Add a paper</h2>
+  <input id="arxivInput" placeholder="arXiv ID, e.g. 1706.03762" />
+  <button id="ingestBtn" onclick="ingestPaper()">Ingest paper</button>
+  <div id="status"></div>
+</section>
+
+<section>
+  <h2>Ask a question</h2>
+  <select id="paperSelect">
+    <option value="">All papers</option>
+  </select>
+  <textarea id="questionInput" rows="2" placeholder="What optimizer did they use?"></textarea>
+  <button id="askBtn" onclick="askQuestion()">Ask</button>
+  <div id="answer"></div>
+</section>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+
+async function loadPapers() {
+  const res = await fetch(`${API_BASE}/papers`);
+  const papers = await res.json();
+  const select = document.getElementById("paperSelect");
+  select.innerHTML = '<option value="">All papers</option>';
+  papers.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.arxiv_id;
+    opt.textContent = p.arxiv_id + (p.title ? ` — ${p.title}` : "");
+    select.appendChild(opt);
+  });
+}
+
+async function ingestPaper() {
+  const arxivId = document.getElementById("arxivInput").value.trim();
+  const statusEl = document.getElementById("status");
+  const btn = document.getElementById("ingestBtn");
+  if (!arxivId) return;
+
+  btn.disabled = true;
+  statusEl.className = "";
+  statusEl.textContent = "Ingesting -- this can take a minute (parsing + embedding)...";
+
+  try {
+    const res = await fetch(`${API_BASE}/papers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ arxiv_id: arxivId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Ingestion failed");
+
+    statusEl.className = "ok";
+    statusEl.textContent = `Done -- ${arxivId} is ready to query.`;
+    loadPapers();
+  } catch (err) {
+    statusEl.className = "err";
+    statusEl.textContent = "Error: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function askQuestion() {
+  const question = document.getElementById("questionInput").value.trim();
+  const arxivId = document.getElementById("paperSelect").value;
+  const answerEl = document.getElementById("answer");
+  const btn = document.getElementById("askBtn");
+  if (!question) return;
+
+  btn.disabled = true;
+  answerEl.textContent = "Thinking...";
+
+  try {
+    const res = await fetch(`${API_BASE}/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, arxiv_id: arxivId || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Request failed");
+    answerEl.textContent = data.answer;
+  } catch (err) {
+    answerEl.textContent = "Error: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+loadPapers();
+</script>
+
+</body>
+</html>
