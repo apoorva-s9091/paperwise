@@ -64,6 +64,16 @@ def already_ingested(arxiv_id: str) -> bool:
     return len(res.data) > 0
 
 
+def already_ingested_by_hash(content_hash: str) -> dict | None:
+    res = (
+        supabase.table("papers")
+        .select("id, arxiv_id, markdown_path")
+        .eq("content_hash", content_hash)
+        .execute()
+    )
+    return res.data[0] if res.data else None
+
+
 def ingest_paper(arxiv_id: str) -> None:
     if already_ingested(arxiv_id):
         print(f"[skip] {arxiv_id} already in papers table")
@@ -73,7 +83,7 @@ def ingest_paper(arxiv_id: str) -> None:
     pdf_bytes = fetch_pdf_bytes(arxiv_id)
     content_hash = hashlib.sha256(pdf_bytes).hexdigest()
 
-    print(f"[parse] running Docling ({len(pdf_bytes) // 1024} KB)...")
+    print(f"[parse] running PyMuPDF4LLM ({len(pdf_bytes) // 1024} KB)...")
     markdown_text = parse_to_markdown(pdf_bytes)
 
     markdown_path = MARKDOWN_DIR / f"{arxiv_id}.md"
@@ -91,6 +101,47 @@ def ingest_paper(arxiv_id: str) -> None:
     ).execute()
 
     print(f"[done] {arxiv_id} ingested successfully.")
+
+
+def ingest_uploaded_pdf(pdf_bytes: bytes, filename: str) -> dict:
+    """
+    Ingest a user-uploaded PDF that has no arXiv ID. Deduped by content
+    hash instead -- uploading the exact same file twice reuses the
+    existing row rather than reprocessing.
+
+    Returns the paper row (dict with at least "id").
+    """
+    content_hash = hashlib.sha256(pdf_bytes).hexdigest()
+
+    existing = already_ingested_by_hash(content_hash)
+    if existing:
+        print(f"[skip] {filename} already ingested (content hash match)")
+        return existing
+
+    print(f"[parse] running PyMuPDF4LLM on {filename} ({len(pdf_bytes) // 1024} KB)...")
+    markdown_text = parse_to_markdown(pdf_bytes)
+
+    markdown_path = MARKDOWN_DIR / f"{content_hash}.md"
+    markdown_path.write_text(markdown_text, encoding="utf-8")
+    print(f"[save] wrote {markdown_path}")
+
+    print("[db] inserting row into Supabase...")
+    result = (
+        supabase.table("papers")
+        .insert(
+            {
+                "arxiv_id": None,
+                "content_hash": content_hash,
+                "title": filename,
+                "markdown_path": str(markdown_path),
+                "status": "processed",
+            }
+        )
+        .execute()
+    )
+
+    print(f"[done] {filename} ingested successfully.")
+    return result.data[0]
 
 
 if __name__ == "__main__":

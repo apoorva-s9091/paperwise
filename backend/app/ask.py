@@ -23,14 +23,19 @@ def resolve_paper_id(arxiv_id: str) -> str | None:
 
 def ask(question: str, arxiv_id: str | None = None) -> str:
     paper_id = resolve_paper_id(arxiv_id) if arxiv_id else None
+    return ask_by_paper_id(question, paper_id)
+
+
+def ask_by_paper_id(question: str, paper_id: str | None = None) -> str:
+    """Same as ask(), but takes the paper's actual id directly -- needed
+    for uploaded papers, which have no arxiv_id to resolve from."""
     chunks = retrieve(question, paper_id=paper_id)
 
     print(f"[retrieved] {len(chunks)} chunks:")
     for c in chunks:
         print(f'  - "{c["section_title"]}" (similarity: {c["similarity"]:.3f})')
 
-    answer = generate_answer(question, chunks)
-    return answer
+    return generate_answer(question, chunks)
 
 
 if __name__ == "__main__":
