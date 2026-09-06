@@ -70,6 +70,7 @@ deployment.
 
 Everything runs on free tiers — no paid infrastructure required.
 
+
 ## Why not just chunk everything?
 
 Standard RAG splits documents into arbitrary fixed-size chunks, which
